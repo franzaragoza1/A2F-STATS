@@ -1,44 +1,51 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-import sqlite3
+import sqlalchemy # Importamos SQLAlchemy
 import json
 import datetime
-import os
+import os # Importamos os para leer variables de entorno
 
 # --- Configuración Inicial ---
 app = Flask(__name__, template_folder='templates')
-CORS(app) # pyright: ignore[reportUnknownMemberType]
-DB_FILE = "stats.db"
+CORS(app)
+
+# ¡CAMBIO IMPORTANTE!
+# Ya no definimos DB_FILE. En su lugar, nos conectamos a la URL de la BBDD
+# que pusimos en las variables de entorno de Render.
+# Si no la encuentra, usa una BBDD sqlite local (para pruebas)
+DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///stats.db')
+engine = sqlalchemy.create_engine(DATABASE_URL)
 
 # ---------- Crear la base de datos si no existe ----------
 def init_db():
     print("Inicializando base de datos...")
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS partidos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha TEXT,
-            rival TEXT,
-            marcador_local INTEGER,
-            marcador_rival INTEGER,
-            boxscore_json TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print(f"Base de datos '{DB_FILE}' lista.")
+    # La sintaxis de CREATE TABLE es estándar y funciona en PostgreSQL
+    create_table_query = """
+    CREATE TABLE IF NOT EXISTS partidos (
+        id SERIAL PRIMARY KEY,
+        fecha TEXT,
+        rival TEXT,
+        marcador_local INTEGER,
+        marcador_rival INTEGER,
+        boxscore_json TEXT
+    )
+    """
+    # Usamos SQLAlchemy para conectarnos y ejecutar
+    try:
+        with engine.connect() as conn:
+            conn.execute(sqlalchemy.text(create_table_query)) # pyright: ignore[reportUnknownMemberType]
+        print("Tabla 'partidos' verificada/creada.")
+    except Exception as e:
+        print(f"Error al inicializar la BBDD: {e}")
 
 # --- Rutas de la Interfaz de Usuario (Frontend) ---
 
 @app.route("/")
 def index():
-    """ Sirve la página principal de estadísticas de temporada. """
     return render_template("temporada.html")
 
 @app.route("/boxscore")
 def boxscore_page():
-    """ Sirve la página para registrar un nuevo partido. """
     return render_template("boxscore.html")
 
 # --- Rutas de la API (Backend) ---
@@ -56,14 +63,20 @@ def guardar_boxscore():
         boxscore_json = json.dumps(data.get("boxscore", {}))
         fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO partidos (fecha, rival, marcador_local, marcador_rival, boxscore_json) VALUES (?,?,?,?,?)",
-            (fecha, rival, marcador_local, marcador_rival, boxscore_json)
+        # ¡CAMBIO! Usamos engine.connect() y :parametros
+        query = sqlalchemy.text(
+            "INSERT INTO partidos (fecha, rival, marcador_local, marcador_rival, boxscore_json) VALUES (:fecha, :rival, :marcador_local, :marcador_rival, :boxscore_json)"
         )
-        conn.commit()
-        conn.close()
+        
+        with engine.connect() as conn:
+            conn.execute(query, {
+                "fecha": fecha, 
+                "rival": rival, 
+                "marcador_local": marcador_local, 
+                "marcador_rival": marcador_rival, 
+                "boxscore_json": boxscore_json
+            })
+            conn.commit() # pyright: ignore[reportUnknownMemberType]
 
         return jsonify({"mensaje": "Boxscore guardado correctamente", "fecha": fecha}), 200
 
@@ -73,36 +86,36 @@ def guardar_boxscore():
 
 @app.route("/partidos", methods=["GET"])
 def listar_partidos():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row # Devuelve diccionarios en lugar de tuplas
-    c = conn.cursor()
-    c.execute("SELECT id, fecha, rival, marcador_local, marcador_rival FROM partidos ORDER BY id DESC")
-    partidos = [dict(row) for row in c.fetchall()]
-    conn.close()
+    query = sqlalchemy.text("SELECT id, fecha, rival, marcador_local, marcador_rival FROM partidos ORDER BY id DESC")
+    
+    with engine.connect() as conn:
+        result = conn.execute(query)
+        # Convertimos el resultado a una lista de diccionarios
+        partidos = [dict(row._mapping) for row in result]
+        
     return jsonify(partidos)
 
 @app.route("/partidos/<int:partido_id>", methods=["GET"])
 def detalle_partido(partido_id):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT id, fecha, rival, marcador_local, marcador_rival, boxscore_json FROM partidos WHERE id = ?", (partido_id,))
-    row = c.fetchone()
-    conn.close()
+    query = sqlalchemy.text("SELECT id, fecha, rival, marcador_local, marcador_rival, boxscore_json FROM partidos WHERE id = :id")
+    
+    with engine.connect() as conn:
+        result = conn.execute(query, {"id": partido_id})
+        row = result.fetchone()
+
     if not row:
         return jsonify({"error": "Partido no encontrado"}), 404
 
     # Convertir la fila a dict y parsear el JSON
-    partido_dict = dict(row)
-    partido_dict["boxscore"] = json.loads(partido_dict["boxscore_json"]) # pyright: ignore[reportUnknownArgumentType]
-    del partido_dict["boxscore_json"] # No enviar el string JSON duplicado
+    partido_dict = dict(row._mapping)
+    partido_dict["boxscore"] = json.loads(partido_dict["boxscore_json"])
+    del partido_dict["boxscore_json"]
 
     return jsonify(partido_dict)
 
 # ---------- Inicio ----------
 if __name__ == "__main__":
     init_db()
-    print("Servidor Flask iniciado en http://127.0.0.1:5000")
-    print("Abre http://127.0.0.1:5000 para ver las estadísticas")
-    print("Abre http://127.0.0.1:5000/boxscore para registrar un partido")
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Servidor Flask iniciado en http://127.0.0.1:{port}")
+    app.run(debug=True, host='0.0.0.0', port=port)
