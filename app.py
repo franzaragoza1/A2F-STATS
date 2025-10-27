@@ -113,6 +113,70 @@ def detalle_partido(partido_id):
 
     return jsonify(partido_dict)
 
+# ... (justo después de tu función @app.route("/partidos/<int:partido_id>")
+#
+# ---------- Ver un partido individual (Página HTML) ----------
+@app.route("/partido/<int:partido_id>")
+def ver_partido(partido_id):
+    query = sqlalchemy.text("SELECT * FROM partidos WHERE id = :id")
+    partido_data = {}
+    with engine.connect() as conn:
+        result = conn.execute(query, {"id": partido_id})
+        row = result.fetchone()
+        if not row:
+            return "Partido no encontrado", 404
+        # Convertimos la fila a un diccionario
+        partido_data = dict(row._mapping)
+
+    # Cargamos el JSON del boxscore
+    raw_boxscore = json.loads(partido_data["boxscore_json"])
+    
+    # Pre-calculamos las estadísticas para la plantilla
+    processed_boxscore = []
+    
+    # Asegurarnos de que el boxscore es una lista
+    if isinstance(raw_boxscore, list):
+        for j in raw_boxscore:
+            s = j.get('stats', {})
+            # Obtenemos todas las estadísticas con valores por defecto 0
+            FGM=s.get('FGM',0); FGA=s.get('FGA',0); TPM=s.get('3PM',0); TPA=s.get('3PA',0); FTM=s.get('FTM',0); FTA=s.get('FTA',0)
+            
+            # Esta lógica es la misma que usabas en boxscore.html para calcular PTS
+            pts = (FTM) + (FGM * 2) + (TPM * 3)
+            
+            # Calculamos tiros de campo (TC)
+            tc = FGM + TPM
+            tci = FGA + TPA # FGA y 3PA ya son los intentos totales en tu app
+            pct = f"{round((tc / tci) * 100)}%" if tci > 0 else "0%"
+            
+            # Calculamos triples (3P)
+            tpp = f"{round((TPM / TPA) * 100)}%" if TPA > 0 else "0%"
+            
+            # Calculamos tiros libres (TL)
+            ftp = f"{round((FTM / FTA) * 100)}%" if FTA > 0 else "0%"
+            
+            processed_boxscore.append({
+                "number": j.get('number', ''),
+                "name": j.get('name', ''),
+                "pts": pts,
+                "tc": f"{tc}/{tci}", "pct": pct,
+                "3p": f"{TPM}/{TPA}", "3ppct": tpp,
+                "tl": f"{FTM}/{FTA}", "tlpct": ftp,
+                "reb": s.get('REB', 0),
+                "ast": s.get('AST', 0),
+                "stl": s.get('STL', 0),
+                "blk": s.get('BLK', 0),
+                "tov": s.get('TOV', 0),
+                "pf": s.get('PF', 0)
+            })
+    
+    # Ordenamos por dorsal
+    processed_boxscore.sort(key=lambda x: x.get('number', 0))
+
+    # Pasamos los datos del partido y el boxscore procesado a la plantilla
+    return render_template("detalle_partido.html", 
+                           partido=partido_data, 
+                           boxscore=processed_boxscore)
 # ---------- Inicio ----------
 if __name__ == "__main__":
     init_db()
