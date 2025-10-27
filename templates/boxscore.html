@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>A2F Stats Tracker (v6-final)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+
+/* ----- Botones jugadores ----- */
+.player-btn { transition: all 0.12s ease-in-out; border: 2px solid transparent; cursor: pointer; padding: 0.6rem; border-radius: 0.5rem; text-align: left; display: flex; align-items:center; gap:0.5rem; }
+.player-btn.on-court { background-color: #dbeafe; border-color: #60a5fa; }
+.player-btn.selected-for-sub { border: 2px dashed #f97316 !important; background-color: #fff7ed; }
+.player-btn.selected { background-color: #2563eb !important; color: white !important; border-color: #1d4ed8 !important; transform: scale(1.03); box-shadow: 0 6px 10px rgba(37,99,235,0.12); }
+.player-number { font-weight:700; min-width:2.2rem; display:inline-block; text-align:center; }
+
+/* ----- Botones acción ----- */
+.action-btn { transition: all 0.08s ease-in-out; box-shadow: 0 2px 6px rgba(0,0,0,0.06); border-radius: 0.5rem; padding: 0.6rem; font-weight: 600; }
+.action-btn:active { transform: scale(0.98); box-shadow: none; }
+.action-btn:disabled { background-color: #e5e7eb !important; color: #6b7280 !important; cursor: not-allowed; opacity: 0.7; }
+
+/* ----- Tabla Boxscore ----- */
+#summary-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+#summary-table thead th {
+    background: linear-gradient(90deg, #1e3a8a, #2563eb);
+    color: white;
+    text-align: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    padding: 10px 6px;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+#summary-table thead th:first-child { border-left: none; }
+#summary-table thead th:last-child { border-right: none; }
+
+#summary-table tbody tr {
+    background-color: white;
+    transition: background-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+}
+#summary-table tbody tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+#summary-table tbody tr:hover {
+    background-color: #e0f2fe;
+    box-shadow: inset 0 0 0 9999px rgba(37,99,235,0.05);
+}
+
+#summary-table tbody td {
+    text-align: center;
+    font-size: 0.85rem;
+    padding: 8px 6px;
+    border-right: 1px solid #e5e7eb;
+}
+#summary-table tbody td:first-child {
+    font-weight: bold;
+    color: #1e3a8a;
+}
+#summary-table tbody td:nth-child(2) {
+    text-align: left;
+    padding-left: 10px;
+    background-color: rgba(0,0,0,0.02);
+}
+#summary-table tbody td:nth-child(3) {
+    font-weight: bold;
+    color: #2563eb;
+    background-color: rgba(0,0,255,0.03);
+}
+#summary-table tbody td:last-child {
+    border-right: none;
+}
+
+/* Sombra vertical suave entre columnas */
+#summary-table tbody td:nth-child(5),
+#summary-table tbody td:nth-child(7),
+#summary-table tbody td:nth-child(9),
+#summary-table tbody td:nth-child(11) {
+    background-color: rgba(0,0,0,0.015);
+}
+
+/* Scroll del log */
+#event-log::-webkit-scrollbar { width: 6px; }
+#event-log::-webkit-scrollbar-thumb { background-color: #93c5fd; border-radius: 10px; }
+#event-log::-webkit-scrollbar-thumb:hover { background-color: #3b82f6; }
+</style>
+
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+<div class="container mx-auto max-w-7xl p-4">
+    <header class="mb-6 p-4 bg-white rounded-lg shadow-md">
+        <div class="flex flex-col sm:flex-row justify-between items-center">
+            <div class="text-center mb-4 sm:mb-0">
+                <div class="flex items-center justify-center sm:justify-start">
+                    <img src="https://i.ibb.co/jvrV8GCn/Logo-A2-F-ok.png" alt="Logo" class="h-14 w-auto mr-3">
+                    <span class="text-2xl font-bold text-gray-800">A2F Spiz</span>
+                </div>
+                <div id="home-score" class="text-5xl font-black text-blue-600 mt-2">0</div>
+            </div>
+
+            <div class="text-4xl font-light text-gray-400 hidden sm:block">-</div>
+
+            <div class="text-center">
+                <input id="opponentName" value="Visitante" />
+                <div class="flex items-center justify-center mt-2">
+                    <button id="opponent-minus" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold w-10 h-10 rounded-full">-</button>
+                    <div id="opponent-score" class="text-4xl font-black text-red-600 mx-4">0</div>
+                    <button id="opponent-plus" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold w-10 h-10 rounded-full">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-right space-x-2">
+            <button id="export-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Exportar Boxscore</button>
+            <button id="reset-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Resetear Partido</button>
+            <button id="save-db-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Guardar en BBDD</button>
+
+        </div>
+    </header>
+
+    <div class="flex flex-col lg:flex-row-reverse lg:gap-6">
+        <!-- Sidebar -->
+        <div class="lg:w-1/3 w-full flex-shrink-0">
+            <div class="sticky top-4 space-y-6">
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-3 border-b pb-2">Registrar Acción</h2>
+                    <p class="text-sm text-gray-500 mb-4 h-10 flex items-center">Jugador: 
+                        <strong id="selected-player-name" class="text-blue-600 ml-1">Selecciona jugador en pista</strong>
+                    </p>
+                    <div id="action-buttons" class="grid grid-cols-2 gap-3">
+                        <button data-action="FGM" class="action-btn bg-green-500 hover:bg-green-600 text-white">Canasta (2 pts)</button>
+                        <button data-action="FGA" class="action-btn bg-red-500 hover:bg-red-600 text-white">Fallo (2 pts)</button>
+                        <button data-action="3PM" class="action-btn bg-green-700 hover:bg-green-800 text-white">Canasta (3 pts)</button>
+                        <button data-action="3PA" class="action-btn bg-red-700 hover:bg-red-800 text-white">Fallo (3 pts)</button>
+                        <button data-action="FTM" class="action-btn bg-green-400 hover:bg-green-500 text-gray-900 font-bold">TL Anotado</button>
+                        <button data-action="FTA" class="action-btn bg-red-400 hover:bg-red-500 text-gray-900 font-bold">TL Fallado</button>
+                        <button data-action="REB" class="action-btn bg-blue-500 hover:bg-blue-600 text-white">Rebote</button>
+                        <button data-action="AST" class="action-btn bg-yellow-500 hover:bg-yellow-600 text-black">Asistencia</button>
+                        <button data-action="STL" class="action-btn bg-purple-500 hover:bg-purple-600 text-white">Robo</button>
+                        <button data-action="BLK" class="action-btn bg-gray-700 hover:bg-gray-800 text-white">Tapón</button>
+                        <button data-action="TOV" class="action-btn bg-orange-500 hover:bg-orange-600 text-white">Pérdida</button>
+                        <button data-action="PF" class="action-btn bg-red-900 hover:bg-red-800 text-white">Falta</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-3 border-b pb-2">
+                        <h2 class="text-xl font-semibold">Registro de Eventos</h2>
+                        <button id="undo-button" class="bg-yellow-400 hover:bg-yellow-500 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm" disabled>Deshacer</button>
+                    </div>
+                    <div id="event-log" class="h-64 overflow-y-auto bg-gray-50 p-3 rounded-md border border-gray-200">
+                        <p class="text-gray-500 text-center">Inicia el partido...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main -->
+        <div class="lg:w-2/3 w-full">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <h2 id="on-court-title" class="text-xl font-semibold mb-3 border-b pb-2">En Pista (0/5)</h2>
+                    <div id="on-court-list" class="grid grid-cols-2 gap-3 min-h-[6rem]"></div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-3 border-b pb-2">Banquillo</h2>
+                    <div id="bench-list" class="grid grid-cols-2 gap-3 min-h-[6rem]"></div>
+                    <p class="small-muted mt-2">Haz click en un jugador del banquillo para marcarlo para entrar (borde naranja). Luego haz click en un jugador en pista para sustituirlo.</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-3 border-b pb-2">Boxscore A2F Spiz</h2>
+                <div class="overflow-x-auto">
+                    <table id="summary-table" class="w-full min-w-max text-left">
+                        <thead class="table-header">
+                            <tr>
+                                <th>#</th><th>Nombre</th><th>PTS</th><th>TC</th><th>%TC</th><th>3P</th><th>%3P</th><th>TL</th><th>%TL</th><th>REB</th><th>AST</th><th>ROB</th><th>TAP</th><th>PER</th><th>FP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summary-table-body" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ---------- Estado y configuración ---------- */
+const STORAGE_KEY = 'a2fStats_v6_final';
+const MAX_HISTORY = 10;
+const statKeys = ['FGM','FGA','3PM','3PA','FTM','FTA','REB','AST','STL','BLK','TOV','PF'];
+const actionTextMap = {'FGM':'+2pts','FGA':'Fallo 2','3PM':'+3pts','3PA':'Fallo 3','FTM':'+1 TL','FTA':'Fallo TL','REB':'Rebote','AST':'Asistencia','STL':'Robo','BLK':'Tapón','TOV':'Pérdida','PF':'Falta'};
+
+let players = [];
+let onCourt = [];              // array de player.id
+let selectedPlayerId = null;   // id del jugador seleccionado para anotar
+let benchPlayerSelectedForSub = null; // id del jugador del banquillo marcado para entrar
+let eventLog = [];            // array de strings
+let actionHistory = [];       // snapshots para undo
+let opponentScore = 0;
+
+/* ---------- Referencias DOM ---------- */
+const $ = id => document.getElementById(id);
+const els = {
+    benchList: $('bench-list'),
+    onCourtList: $('on-court-list'),
+    onCourtTitle: $('on-court-title'),
+    selectedPlayerName: $('selected-player-name'),
+    actionButtons: $('action-buttons'),
+    summaryBody: $('summary-table-body'),
+    eventLog: $('event-log'),
+    undoButton: $('undo-button'),
+    resetButton: $('reset-button'),
+    exportButton: $('export-button'),
+    opponentScore: $('opponent-score'),
+    opponentPlus: $('opponent-plus'),
+    opponentMinus: $('opponent-minus'),
+    opponentName: $('opponentName'),
+    homeScore: $('home-score')
+};
+
+/* ---------- Helpers: estado (save/load) ---------- */
+function saveState() {
+    try {
+        const state = { players, onCourt, selectedPlayerId, benchPlayerSelectedForSub, eventLog, actionHistory, opponentScore };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+        console.error('Error saving state', e);
+    }
+}
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const s = JSON.parse(raw);
+        players = s.players || players;
+        onCourt = s.onCourt || onCourt;
+        selectedPlayerId = s.selectedPlayerId || null;
+        benchPlayerSelectedForSub = s.benchPlayerSelectedForSub || null;
+        eventLog = s.eventLog || [];
+        actionHistory = s.actionHistory || [];
+        opponentScore = s.opponentScore || 0;
+        if (els.opponentName) els.opponentName.value = s.opponentName || els.opponentName.value;
+        return true;
+    } catch (e) {
+        console.error('Error loading state', e);
+        return false;
+    }
+}
+
+/* ---------- Inicialización de jugadores ---------- */
+function createInitialPlayers() {
+    const initial = [
+        { number:8, name:'JULEN' },{ number:98, name:'FRANCHICHA' },{ number:14, name:'JAVI' },{ number:3, name:'KALVIN' },
+        { number:1, name:'ALEXIS' },{ number:0, name:'RAFA' },{ number:4, name:'CARLOS' },{ number:23, name:'GABINO' },
+        { number:83, name:'PEDRO' },{ number:81, name:'JAVI PURO' },{ number:6, name:'CARROBLES' },{ number:30, name:'J. RODRIGUEZ' },
+        { number:11, name:'GOLDENBOY' },{ number:9, name:'CARLOS' },{ number:89, name:'MARRACO' }
+    ];
+    return initial.map((p, idx) => {
+        const stats = {};
+        statKeys.forEach(k => stats[k] = 0);
+        return { id: idx+1, number: p.number, name: p.name, stats };
+    });
+}
+
+/* ---------- Render UI ---------- */
+function renderAll() {
+    renderPlayerLists();
+    renderSummary();
+    renderEventLog();
+    renderOpponentScore();
+    updateSelectedPlayerInfo();
+    updateUndoButton();
+}
+function renderPlayerLists() {
+    els.onCourtList.innerHTML = '';
+    els.benchList.innerHTML = '';
+    if (!players || players.length === 0) {
+        els.benchList.innerHTML = '<p class="text-gray-500 col-span-2 text-center pt-4">No hay jugadores</p>';
+        return;
+    }
+    // ordenar por dorsal
+    const sorted = [...players].sort((a,b)=>a.number - b.number);
+    let onCount = 0;
+    sorted.forEach((p, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'player-btn';
+        btn.dataset.playerId = p.id;
+        btn.innerHTML = `<span class="player-number">#${p.number}</span><span class="player-name">${p.name}</span>`;
+        btn.onclick = () => handlePlayerClick(p.id);
+
+        if (onCourt.includes(p.id)) {
+            btn.classList.add('on-court');
+            if (selectedPlayerId === p.id) btn.classList.add('selected');
+            els.onCourtList.appendChild(btn);
+            onCount++;
+        } else {
+            if (benchPlayerSelectedForSub === p.id) btn.classList.add('selected-for-sub');
+            els.benchList.appendChild(btn);
+        }
+    });
+    els.onCourtTitle.innerHTML = `En Pista (${onCount}/5)`;
+    if (onCount === 0) els.onCourtList.innerHTML = '<p class="text-gray-500 col-span-2 text-center pt-4">Selecciona 5</p>';
+}
+
+/* Muestra datos del jugador seleccionado en la sidebar */
+function updateSelectedPlayerInfo() {
+    if (!selectedPlayerId) {
+        els.selectedPlayerName.textContent = 'Selecciona jugador en pista';
+        // desactivar botones de acción
+        Array.from(els.actionButtons.querySelectorAll('button')).forEach(b => b.disabled = true);
+        return;
+    }
+    const p = players.find(x => x.id === selectedPlayerId);
+    if (p) {
+        els.selectedPlayerName.textContent = `#${p.number} ${p.name}`;
+        Array.from(els.actionButtons.querySelectorAll('button')).forEach(b => b.disabled = false);
+    } else {
+        els.selectedPlayerName.textContent = 'Selecciona jugador en pista';
+    }
+}
+
+/* Tabla resumen */
+function renderSummary() {
+    els.summaryBody.innerHTML = '';
+    let totalPoints = 0;
+    const ordered = [...players].sort((a,b)=>a.number-b.number);
+    ordered.forEach((p) => {
+        const s = p.stats || {};
+        const pts = (s.FTM || 0) + (s.FGM || 0)*2 + (s['3PM'] || 0)*3;
+        totalPoints += pts;
+        const tc = (s.FGM || 0) + (s['3PM'] || 0);
+        const tci = (s.FGA || 0) + (s['3PA'] || 0);
+        const pct = tci ? Math.round((tc / tci) * 100) : 0;
+        const tpp = s['3PA'] ? Math.round(( (s['3PM']||0) / s['3PA'] ) * 100) : 0;
+        const ftp = s.FTA ? Math.round(( (s.FTM||0) / s.FTA ) * 100) : 0;
+
+        const tr = document.createElement('tr');
+        tr.className = 'table-row';
+        tr.innerHTML = `<td>${p.number}</td>
+                        <td style="text-align:left;padding-left:8px">${p.name}</td>
+                        <td class="stat-highlight">${pts}</td>
+                        <td>${tc}/${tci}</td><td>${pct}%</td>
+                        <td>${s['3PM']||0}/${s['3PA']||0}</td><td>${tpp}%</td>
+                        <td>${s.FTM||0}/${s.FTA||0}</td><td>${ftp}%</td>
+                        <td>${s.REB||0}</td><td>${s.AST||0}</td><td>${s.STL||0}</td><td>${s.BLK||0}</td><td>${s.TOV||0}</td><td>${s.PF||0}</td>`;
+        els.summaryBody.appendChild(tr);
+    });
+    els.homeScore.textContent = totalPoints;
+}
+
+/* Log de eventos */
+function renderEventLog() {
+    if (!eventLog || eventLog.length === 0) {
+        els.eventLog.innerHTML = '<p class="text-gray-500 text-center">Inicia el partido...</p>';
+        return;
+    }
+    els.eventLog.innerHTML = eventLog.map(ev => `<div class="log-item">${ev}</div>`).join('');
+    els.eventLog.scrollTop = els.eventLog.scrollHeight;
+}
+
+/* Punt. rival */
+function renderOpponentScore() {
+    els.opponentScore.textContent = opponentScore;
+}
+
+/* ---------- Interacciones: click en jugador, sustitución, añadir stat ---------- */
+function handlePlayerClick(playerId) {
+    // Si es jugador en pista
+    const on = onCourt.includes(playerId);
+    if (on) {
+        // Si hay un banquillo marcado -> sustitución: el marcado entra por este
+        if (benchPlayerSelectedForSub) {
+            const inId = benchPlayerSelectedForSub;
+            const outId = playerId;
+            // snapshot para undo
+            pushHistory();
+            // sustituir: quitar outId, meter inId
+            onCourt = onCourt.map(x => x === outId ? inId : x);
+            benchPlayerSelectedForSub = null;
+            selectedPlayerId = inId;
+            addLogSimple(`Sustitución: #${getPlayerNumber(outId)} fuera → #${getPlayerNumber(inId)} entra`);
+            saveState(); renderAll(); return;
+        }
+        // si no hay nadie marcado -> seleccionar/deseleccionar
+        if (selectedPlayerId === playerId) {
+            selectedPlayerId = null;
+        } else {
+            selectedPlayerId = playerId;
+        }
+        // actualizar UI
+        saveState(); renderAll();
+        return;
+    } else {
+        // jugador en banquillo
+        if (onCourt.length < 5) {
+            // entrar directamente si hueco
+            pushHistory();
+            onCourt.push(playerId);
+            selectedPlayerId = playerId;
+            benchPlayerSelectedForSub = null;
+            addLogSimple(`#${getPlayerNumber(playerId)} ${getPlayerName(playerId)} entra al partido`);
+            saveState(); renderAll(); return;
+        }
+        // marcar para sustituir
+        benchPlayerSelectedForSub = playerId;
+        selectedPlayerId = null;
+        renderAll();
+        return;
+    }
+}
+
+function getPlayerById(id) { return players.find(p => p.id === id); }
+function getPlayerName(id) { const p = getPlayerById(id); return p ? p.name : ''; }
+function getPlayerNumber(id) { const p = getPlayerById(id); return p ? p.number : ''; }
+
+/* Añadir estadística al jugador seleccionado */
+function addStat(statType) {
+    if (!selectedPlayerId || !onCourt.includes(selectedPlayerId)) {
+        alert('Selecciona un jugador EN PISTA antes de registrar la acción.');
+        return;
+    }
+    // snapshot
+    pushHistory();
+
+    const p = getPlayerById(selectedPlayerId);
+    if (!p) return;
+    p.stats[statType] = (p.stats[statType] || 0) + 1;
+
+    // contar intentos globales: cuando se registra FGM contar también FGA etc.
+    if (statType === 'FGM' || statType === 'FGA') p.stats.FGA = (p.stats.FGA || 0) + 1;
+    if (statType === '3PM' || statType === '3PA') p.stats['3PA'] = (p.stats['3PA'] || 0) + 1;
+    if (statType === 'FTM' || statType === 'FTA') p.stats.FTA = (p.stats.FTA || 0) + 1;
+
+    const txt = `#${p.number} ${p.name}: ${actionTextMap[statType] || statType}`;
+    addLogSimple(txt);
+    saveState();
+    renderAll();
+}
+
+/* Añade texto simple al log */
+function addLogSimple(text) {
+    const time = new Date();
+    const hh = time.getHours().toString().padStart(2,'0');
+    const mm = time.getMinutes().toString().padStart(2,'0');
+    eventLog.push(`[${hh}:${mm}] ${text}`);
+    if (eventLog.length > 500) eventLog.shift();
+}
+
+/* ---------- Undo / Reset / Export ---------- */
+function pushHistory() {
+    try {
+        const snapshot = {
+            players: JSON.parse(JSON.stringify(players)),
+            onCourt: [...onCourt],
+            selectedPlayerId,
+            benchPlayerSelectedForSub,
+            eventLog: JSON.parse(JSON.stringify(eventLog)),
+            opponentScore
+        };
+        actionHistory.push(snapshot);
+        if (actionHistory.length > MAX_HISTORY) actionHistory.shift();
+        updateUndoButton();
+    } catch (e) { console.warn('Error snapshot', e); }
+}
+function undoLastAction() {
+    if (!actionHistory.length) return;
+    const prev = actionHistory.pop();
+    players = prev.players;
+    onCourt = prev.onCourt;
+    selectedPlayerId = prev.selectedPlayerId || null;
+    benchPlayerSelectedForSub = prev.benchPlayerSelectedForSub || null;
+    eventLog = prev.eventLog || [];
+    opponentScore = prev.opponentScore || 0;
+    saveState();
+    renderAll();
+}
+function updateUndoButton() {
+    els.undoButton.disabled = actionHistory.length === 0;
+}
+
+/* Resetear partido (confirma) */
+function resetMatch() {
+    if (!confirm('¿Seguro que quieres resetear TODO el partido? Se perderán los datos no exportados.')) return;
+    pushHistory();
+    // reinit players y limpiar todo
+    players = createInitialPlayers();
+    onCourt = [];
+    selectedPlayerId = null;
+    benchPlayerSelectedForSub = null;
+    eventLog = [];
+    actionHistory = [];
+    opponentScore = 0;
+    saveState();
+    renderAll();
+}
+
+/* Export CSV */
+function exportBoxscoreCSV() {
+    const header = ['Nº','Nombre','PTS','TC','%TC','3P','%3P','TL','%TL','REB','AST','ROB','TAP','PER','FP'];
+    const rows = [];
+    const ordered = [...players].sort((a,b)=>a.number-b.number);
+    ordered.forEach(p=>{
+        const s = p.stats || {};
+        const pts = (s.FTM||0) + (s.FGM||0)*2 + (s['3PM']||0)*3;
+        const tc = (s.FGM||0) + (s['3PM']||0);
+        const tci = (s.FGA||0) + (s['3PA']||0);
+        const pct = tci ? Math.round((tc / tci) * 100) : 0;
+        const tpp = s['3PA'] ? Math.round(((s['3PM']||0) / s['3PA']) * 100) : 0;
+        const ftp = s.FTA ? Math.round(((s.FTM||0) / s.FTA) * 100) : 0;
+        rows.push([
+            p.number,
+            p.name,
+            pts,
+            `${tc}/${tci}`,
+            `${pct}%`,
+            `${s['3PM']||0}/${s['3PA']||0}`,
+            `${tpp}%`,
+            `${s.FTM||0}/${s.FTA||0}`,
+            `${ftp}%`,
+            s.REB||0,
+            s.AST||0,
+            s.STL||0,
+            s.BLK||0,
+            s.TOV||0,
+            s.PF||0
+        ]);
+    });
+
+    // construir CSV
+    const csv = [header.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const name = `boxscore_A2F_${(new Date()).toISOString().slice(0,10)}.csv`;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+/* ---------- Utilidades ---------- */
+function getPlayerIndex(id) { return players.findIndex(p=>p.id===id); }
+
+/* ---------- Eventos del DOM (listeners) ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+    // Cargar estado o inicializar
+    const ok = loadState();
+    if (!ok) {
+        players = createInitialPlayers();
+        onCourt = [];
+        selectedPlayerId = null;
+        benchPlayerSelectedForSub = null;
+        eventLog = [];
+        actionHistory = [];
+        opponentScore = 0;
+    }
+
+    // Si no hay onCourt, por defecto dejar vacio (usuario seleccionará)
+    renderAll();
+
+    // acción de botones (delegación)
+    els.actionButtons.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const act = btn.dataset.action;
+            if (act) addStat(act);
+        });
+    });
+
+    // Undo
+    els.undoButton.addEventListener('click', () => undoLastAction());
+
+    // Reset
+    els.resetButton.addEventListener('click', () => resetMatch());
+
+    // Export
+    els.exportButton.addEventListener('click', () => exportBoxscoreCSV());
+
+    // Opponent score
+    els.opponentPlus.addEventListener('click', () => { opponentScore++; renderOpponentScore(); saveState(); });
+    els.opponentMinus.addEventListener('click', () => { opponentScore = Math.max(0, opponentScore - 1); renderOpponentScore(); saveState(); });
+
+    // Opponent name: guardar al cambiar
+    els.opponentName.addEventListener('change', () => {
+        const v = els.opponentName.value.trim() || 'Visitante';
+        els.opponentName.value = v;
+        // Guardamos el nombre como parte del state (opcional)
+        const stateRaw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        stateRaw.opponentName = v;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateRaw));
+    });
+
+    // Hacer posible selección inicial: si no hay jugadores en pista, seleccionar los primeros 5 por defecto (opcional)
+    // Comentado por defecto: si quieres que cargue 5 al inicio, descomenta:
+    // if (onCourt.length === 0) onCourt = players.slice(0,5).map(p=>p.id);
+
+    // Mostrar controles activos/desactivados
+    updateSelectedPlayerInfo();
+    updateUndoButton();
+});
+// Guardar en base de datos (enviar al servidor Flask)
+const saveDbBtn = document.getElementById("save-db-button");
+if (saveDbBtn) {
+    saveDbBtn.addEventListener("click", async () => {
+        const boxscore = players.map(p => ({
+            number: p.number,
+            name: p.name,
+            stats: p.stats
+        }));
+
+        const data = {
+            rival: els.opponentName.value,
+            marcador_local: parseInt(els.homeScore.textContent),
+            marcador_rival: opponentScore,
+            boxscore
+        };
+
+        try {
+            const res = await fetch("/guardar_boxscore", { // URL relativa
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+            const out = await res.json();
+            alert(out.mensaje || "Guardado en base de datos");
+        } catch (err) {
+            alert("Error al conectar con el servidor Flask: " + err.message);
+        }
+    });
+}
+
+
+/* ---------- teclado rápido: número selecciona jugador si está en pista ---------- */
+document.addEventListener('keydown', (e) => {
+    // si el usuario presiona Escape, deseleccionar
+    if (e.key === 'Escape') { selectedPlayerId = null; benchPlayerSelectedForSub = null; renderAll(); }
+});
+
+</script>
+</body>
+</html>

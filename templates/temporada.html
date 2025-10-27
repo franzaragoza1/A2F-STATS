@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A2F Spiz – Estadísticas de Temporada</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+.table-header th { background-color: #1e3a8a; color: white; font-size: 0.8rem; text-align: center; padding: 10px; }
+.table-row td { padding: 8px 10px; text-align: center; font-size: 0.85rem; }
+.table-row:nth-child(even) { background-color: #f9fafb; }
+.table-row:hover { background-color: #e0f2fe; }
+.stat-highlight { font-weight: 700; color: #1e3a8a; }
+</style>
+</head>
+
+<body class="p-6">
+<div class="max-w-6xl mx-auto bg-white shadow-lg rounded-lg p-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-blue-700">📊 Estadísticas de Temporada – A2F Spiz</h1>
+    <div>
+      <button id="toggleMode" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+        Mostrar Promedios
+      </button>
+    </div>
+  </div>
+
+  <div id="loading" class="text-center text-gray-500">Cargando estadísticas...</div>
+  <div id="table-container" class="hidden overflow-x-auto">
+    <table id="stats-table" class="min-w-full border-collapse">
+      <thead class="table-header">
+        <tr>
+          <th>#</th><th>Jugador</th><th>PTS</th><th>REB</th><th>AST</th><th>ROB</th><th>TAP</th>
+          <th>PER</th><th>FP</th><th>TC%</th><th>3P%</th><th>TL%</th><th>Partidos</th>
+        </tr>
+      </thead>
+      <tbody id="stats-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_URL = "/partidos"; // URL relativa
+let modoPromedios = false;
+let datos = [];
+
+async function cargarPartidos() {
+  const res = await fetch(API_URL);
+  const partidos = await res.json();
+  if (!Array.isArray(partidos) || partidos.length === 0) {
+    document.getElementById("loading").textContent = "No hay partidos guardados.";
+    return;
+  }
+
+  const resumen = {};
+
+  for (const p of partidos) {
+    const detalle = await fetch(`/partidos/${p.id}`); // URL relativa
+    const data = await detalle.json();
+    const boxscore = data.boxscore || [];
+    for (const jugador of boxscore) {
+      const key = jugador.name;
+      if (!resumen[key]) {
+        resumen[key] = { number: jugador.number, name: jugador.name, partidos: 0 };
+        Object.keys(jugador.stats).forEach(k => resumen[key][k] = 0);
+      }
+      resumen[key].partidos++;
+      for (const stat in jugador.stats) {
+        resumen[key][stat] += jugador.stats[stat];
+      }
+    }
+  }
+
+  datos = Object.values(resumen);
+  mostrarTabla();
+}
+
+function mostrarTabla() {
+  const body = document.getElementById("stats-body");
+  body.innerHTML = "";
+  datos.sort((a,b)=>a.number-b.number);
+  datos.forEach(j => {
+    const FGM=j.FGM||0,FGA=j.FGA||0,TPM=j["3PM"]||0,TPA=j["3PA"]||0,FTM=j.FTM||0,FTA=j.FTA||0;
+    const PTS = FTM + 2*FGM + 3*TPM;
+    const partidos = j.partidos||1;
+    const tcPerc = ((FGM+TPM)/(FGA+TPA||1)*100).toFixed(1);
+    const t3Perc = ((TPM)/(TPA||1)*100).toFixed(1);
+    const tlPerc = ((FTM)/(FTA||1)*100).toFixed(1);
+
+    const val = v => modoPromedios ? (v/partidos).toFixed(1) : v;
+
+    const tr = document.createElement("tr");
+    tr.className = "table-row";
+    tr.innerHTML = `
+      <td>${j.number}</td>
+      <td style="text-align:left;">${j.name}</td>
+      <td class="stat-highlight">${val(PTS)}</td>
+      <td>${val(j.REB||0)}</td>
+      <td>${val(j.AST||0)}</td>
+      <td>${val(j.STL||0)}</td>
+      <td>${val(j.BLK||0)}</td>
+      <td>${val(j.TOV||0)}</td>
+      <td>${val(j.PF||0)}</td>
+      <td>${tcPerc}%</td>
+      <td>${t3Perc}%</td>
+      <td>${tlPerc}%</td>
+      <td>${j.partidos}</td>`;
+    body.appendChild(tr);
+  });
+
+  document.getElementById("loading").classList.add("hidden");
+  document.getElementById("table-container").classList.remove("hidden");
+}
+
+document.getElementById("toggleMode").addEventListener("click", () => {
+  modoPromedios = !modoPromedios;
+  document.getElementById("toggleMode").textContent = modoPromedios ? "Mostrar Totales" : "Mostrar Promedios";
+  mostrarTabla();
+});
+
+cargarPartidos();
+</script>
+</body>
+</html>
