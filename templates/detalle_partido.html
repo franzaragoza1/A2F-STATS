@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boxscore: A2F Spiz vs {{ partido.rival }}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Tomamos los mismos estilos de la tabla de temporada.html */
+body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+.table-header th { background-color: #1e3a8a; color: white; font-size: 0.8rem; text-align: center; padding: 10px; }
+.table-row td { padding: 8px 10px; text-align: center; font-size: 0.85rem; }
+.table-row:nth-child(even) { background-color: #f9fafb; }
+.table-row:hover { background-color: #e0f2fe; }
+.stat-highlight { font-weight: 700; color: #1e3a8a; }
+</style>
+</head>
+
+<body class="p-6">
+<div class="max-w-6xl mx-auto bg-white shadow-lg rounded-lg p-6">
+
+  <div class="flex flex-col sm:flex-row justify-between items-center mb-6 border-b pb-4">
+    <div>
+      <h1 class="text-3xl font-bold text-blue-800">A2F Spiz vs {{ partido.rival }}</h1>
+      <p class="text-gray-600 text-sm mt-1">{{ partido.fecha }}</p>
+    </div>
+    <div class="text-right mt-4 sm:mt-0">
+      <h2 class="text-5xl font-bold">
+        <span class="text-blue-600">{{ partido.marcador_local }}</span> - <span class="text-red-600">{{ partido.marcador_rival }}</span>
+      </h2>
+      <p class="font-semibold text-gray-700">Resultado Final</p>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <h3 class="text-xl font-semibold mb-3">Boxscore del Partido</h3>
+    <table id="stats-table" class="min-w-full border-collapse">
+      <thead class="table-header">
+        <tr>
+          <th>#</th><th>Nombre</th><th>PTS</th><th>TC</th><th>%TC</th><th>3P</th><th>%3P</th><th>TL</th><th>%TL</th><th>REB</th><th>AST</th><th>ROB</th><th>TAP</th><th>PER</th><th>FP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for j in boxscore %}
+        <tr class="table-row">
+          <td>{{ j.number }}</td>
+          <td style="text-align:left; padding-left:10px;">{{ j.name }}</td>
+          <td class="stat-highlight">{{ j.pts }}</td>
+          <td>{{ j.tc }}</td><td>{{ j.pct }}</td>
+          <td>{{ '3p' }}</td><td>{{ j.3ppct }}</td>
+          <td>{{ j.tl }}</td><td>{{ j.tlpct }}</td>
+          <td>{{ j.reb }}</td><td>{{ j.ast }}</td><td>{{ j.stl }}</td><td>{{ j.blk }}</td><td>{{ j.tov }}</td><td>{{ j.pf }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>
