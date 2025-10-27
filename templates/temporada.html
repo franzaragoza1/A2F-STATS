@@ -39,26 +39,77 @@ body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
       <tbody id="stats-body"></tbody>
     </table>
   </div>
-</div>
+  
+  <div class="mt-12">
+    <h2 class="text-2xl font-bold text-blue-700 mb-4">Historial de Partidos</h2>
+    <div id="partidos-list" class="space-y-3">
+      <p class="text-gray-500">Cargando historial de partidos...</p>
+    </div>
+  </div>
+  </div>
 
 <script>
-const API_URL = "/partidos"; // URL relativa
+const API_URL = "/partidos"; // URL Relativa para Render
 let modoPromedios = false;
 let datos = [];
 
 async function cargarPartidos() {
-  const res = await fetch(API_URL);
-  const partidos = await res.json();
+  let partidos = [];
+  try {
+    const res = await fetch(API_URL);
+    partidos = await res.json();
+  } catch (e) {
+    console.error("Error al cargar partidos:", e);
+    document.getElementById("loading").textContent = "Error al conectar con el servidor.";
+    return;
+  }
+  
+  const listEl = document.getElementById("partidos-list");
+  listEl.innerHTML = ""; // Limpiamos el "Cargando..."
+
   if (!Array.isArray(partidos) || partidos.length === 0) {
     document.getElementById("loading").textContent = "No hay partidos guardados.";
+    listEl.innerHTML = '<p class="text-gray-500 text-center">No hay partidos guardados.</p>';
+    // Limpiamos también la tabla de estadísticas
+    document.getElementById("stats-body").innerHTML = "";
+    document.getElementById("loading").classList.add("hidden");
+    document.getElementById("table-container").classList.remove("hidden");
     return;
   }
 
-  const resumen = {};
+  // --- Rellenamos la lista de partidos ---
+  partidos.forEach(p => {
+    const link = document.createElement('a');
+    link.href = `/partido/${p.id}`; // Enlace a la nueva página de detalle
+    link.className = "block p-4 bg-white hover:bg-gray-50 border rounded-lg shadow-sm transition transform hover:scale-[1.02]";
+    link.innerHTML = `
+      <div class="flex flex-col sm:flex-row justify-between items-center">
+        <div>
+          <span class="font-bold text-lg text-blue-600">vs ${p.rival}</span>
+          <span class="text-sm text-gray-500 ml-0 sm:ml-3 mt-1 sm:mt-0 block sm:inline">(${p.fecha})</span>
+        </div>
+        <div class="font-bold text-xl text-right mt-2 sm:mt-0">
+          <span class="text-blue-600">${p.marcador_local}</span> - <span class="text-red-600">${p.marcador_rival}</span>
+        </div>
+      </div>
+    `;
+    listEl.appendChild(link);
+  });
+  // --- Fin de la lista de partidos ---
 
+  // --- Calculamos los totales de temporada ---
+  const resumen = {};
   for (const p of partidos) {
-    const detalle = await fetch(`/partidos/${p.id}`); // URL relativa
-    const data = await detalle.json();
+    let data;
+    try {
+      // Usamos la URL relativa para el detalle
+      const detalle = await fetch(`/partidos/${p.id}`); 
+      data = await detalle.json();
+    } catch (e) {
+      console.error(`Error al cargar detalle de partido ${p.id}:`, e);
+      continue; // Saltamos este partido si falla
+    }
+
     const boxscore = data.boxscore || [];
     for (const jugador of boxscore) {
       const key = jugador.name;
@@ -120,7 +171,12 @@ document.getElementById("toggleMode").addEventListener("click", () => {
   mostrarTabla();
 });
 
+// Carga inicial
 cargarPartidos();
+
+// Refresco automático cada 30 segundos
+setInterval(cargarPartidos, 30000); 
+
 </script>
 </body>
 </html>
